@@ -1,157 +1,95 @@
+import unittest
 import dns.message
 import dns.rdatatype
-import dns.rdataclass
-import dns.rdtypes
-import dns.rdtypes.ANY
-from dns.rdtypes.ANY.MX import MX
-from dns.rdtypes.ANY.SOA import SOA
-import dns.rdata
-import socket
+import dns.resolver
 import threading
-import signal
-import os
+import time
+import socket
 import sys
-
-import hashlib
+import base64
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import base64
-import ast
 
-def generate_aes_key(password, salt):
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        iterations=100000,
-        salt=salt,
-        length=32
-    )
-    key = kdf.derive(password.encode('utf-8'))
-    key = base64.urlsafe_b64encode(key)
-    return key
+# Import your DNS server code here
+# from your_dns_server import run_dns_server, encrypt_with_aes, decrypt_with_aes, generate_aes_key
 
-def encrypt_with_aes(input_string, password, salt):
-    key = generate_aes_key(password, salt)
-    f = Fernet(key)
-    encrypted_data = f.encrypt(input_string.encode('utf-8'))
-    return encrypted_data    
+class Test(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Start DNS server in a separate thread
+        cls.server_thread = threading.Thread(target=run_dns_server_user)
+        cls.server_thread.daemon = True
+        cls.server_thread.start()
+        time.sleep(1)  # Give the server time to start
 
-def decrypt_with_aes(encrypted_data, password, salt):
-    key = generate_aes_key(password, salt)
-    f = Fernet(key)
-    decrypted_data = f.decrypt(encrypted_data)
-    return decrypted_data.decode('utf-8')
+    def setUp(self):
+        # Create a DNS resolver for testing
+        self.resolver = dns.resolver.Resolver()
+        self.resolver.nameservers = ['127.0.0.1']
+        self.resolver.port = 53
+        self.resolver.timeout = 5
+        self.resolver.lifetime = 5
 
-# Initialize encryption parameters
-salt = b'dns_salt_value'
-password = 'dns_secure_password'
-input_string = 'gf2457@nyu.edu'  # Example email to encrypt
-
-def generate_sha256_hash(input_string):
-    sha256_hash = hashlib.sha256()
-    sha256_hash.update(input_string.encode('utf-8'))
-    return sha256_hash.hexdigest()
-
-# Updated DNS records dictionary with all required records
-dns_records = {
-    'example.com.': {
-        dns.rdatatype.A: '192.168.1.101',
-        dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0370:7334',
-        dns.rdatatype.MX: [(10, 'mail.example.com.')],
-        dns.rdatatype.CNAME: 'www.example.com.',
-        dns.rdatatype.NS: 'ns.example.com.',
-        dns.rdatatype.TXT: ('This is a TXT record',),
-        dns.rdatatype.SOA: (
-            'ns1.example.com.',
-            'admin.example.com.',
-            2023081401,
-            3600,
-            1800,
-            604800,
-            86400,
-        ),
-    },
-    'nyu.edu.': {
-        dns.rdatatype.A: '216.165.47.10',
-        dns.rdatatype.AAAA: '2607:f600:1002:6113::100',
-        dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
-        dns.rdatatype.NS: 'ns1.nyu.edu.',
-        dns.rdatatype.TXT: (encrypt_with_aes(input_string, password, salt).decode(),),
-    },
-    'safebank.com.': {
-        dns.rdatatype.A: '192.168.2.100',
-        dns.rdatatype.MX: [(10, 'mail.safebank.com.')],
-        dns.rdatatype.NS: 'ns.safebank.com.',
-    },
-}
-
-def run_dns_server():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_socket.bind(('127.0.0.1', 53))
-
-    while True:
+    def test_DNSServer_query(self):
+        """Test basic DNS query functionality"""
         try:
-            data, addr = server_socket.recvfrom(1024)
-            request = dns.message.from_wire(data)
-            response = dns.message.make_response(request)
+            # Test A record query
+            answer = self.resolver.resolve('example.com', 'A')
+            self.assertEqual(str(answer[0]), '192.168.1.101')
 
-            question = request.question[0]
-            qname = question.name.to_text()
-            qtype = question.rdtype
+            # Test MX record query
+            answer = self.resolver.resolve('example.com', 'MX')
+            self.assertEqual(str(answer[0].exchange), 'mail.example.com.')
+            self.assertEqual(answer[0].preference, 10)
 
-            print("Responding to request:", qname)
+            # Test SOA record query
+            answer = self.resolver.resolve('example.com', 'SOA')
+            self.assertEqual(str(answer[0].mname), 'ns1.example.com.')
+            
+        except Exception as e:
+            self.fail(f"DNS query test failed: {str(e)}")
 
-            if qname in dns_records and qtype in dns_records[qname]:
-                answer_data = dns_records[qname][qtype]
-                rdata_list = []
+    def test_DNSServer_ipv6_query(self):
+        """Test IPv6 (AAAA) record queries"""
+        try:
+            # Test AAAA record query
+            answer = self.resolver.resolve('example.com', 'AAAA')
+            self.assertEqual(str(answer[0]), '2001:db8:85a3::8a2e:370:7334')
 
-                if qtype == dns.rdatatype.MX:
-                    for pref, server in answer_data:
-                        rdata_list.append(MX(dns.rdataclass.IN, dns.rdatatype.MX, pref, server))
-                elif qtype == dns.rdatatype.SOA:
-                    mname, rname, serial, refresh, retry, expire, minimum = answer_data
-                    rdata = SOA(dns.rdataclass.IN, dns.rdatatype.SOA, 
-                              mname, rname, serial, refresh, retry, expire, minimum)
-                    rdata_list.append(rdata)
-                else:
-                    if isinstance(answer_data, str):
-                        rdata_list = [dns.rdata.from_text(dns.rdataclass.IN, qtype, answer_data)]
-                    elif isinstance(answer_data, tuple):
-                        for data in answer_data:
-                            rdata_list.append(dns.rdata.from_text(dns.rdataclass.IN, qtype, data))
-                    else:
-                        rdata_list = [dns.rdata.from_text(dns.rdataclass.IN, qtype, data) for data in answer_data]
-                
-                for rdata in rdata_list:
-                    response.answer.append(dns.rrset.RRset(question.name, dns.rdataclass.IN, qtype))
-                    response.answer[-1].add(rdata)
+            # Test AAAA record for another domain
+            answer = self.resolver.resolve('nyu.edu', 'AAAA')
+            self.assertEqual(str(answer[0]), '2607:f600:1002:6113::100')
+            
+        except Exception as e:
+            self.fail(f"IPv6 query test failed: {str(e)}")
 
-                if qname == "nyu.edu." and qtype == dns.rdatatype.TXT:
-                    print(f"{qname} resolves!")
+    def test_exfiltrate(self):
+        """Test data exfiltration through encrypted DNS TXT records"""
+        try:
+            # Test parameters
+            salt = b'dns_salt_value'
+            password = 'dns_secure_password'
+            original_email = 'gf2457@nyu.edu'
 
-            response.flags |= 1 << 10
-            server_socket.sendto(response.to_wire(), addr)
-        
-        except KeyboardInterrupt:
-            print('\nExiting...')
-            server_socket.close()
-            sys.exit(0)
+            # Query the TXT record
+            answer = self.resolver.resolve('nyu.edu', 'TXT')
+            encrypted_data = answer[0].strings[0].encode()
 
-def run_dns_server_user():
-    print("Input 'q' and hit 'enter' to quit")
-    print("DNS server is running...")
+            # Decrypt the received data
+            decrypted_email = decrypt_with_aes(encrypted_data, password, salt)
 
-    def user_input():
-        while True:
-            cmd = input()
-            if cmd.lower() == 'q':
-                print('Quitting...')
-                os.kill(os.getpid(), signal.SIGINT)
+            # Verify the decrypted email matches the original
+            self.assertEqual(decrypted_email, original_email)
 
-    input_thread = threading.Thread(target=user_input)
-    input_thread.daemon = True
-    input_thread.start()
-    run_dns_server()
+            # Test encryption roundtrip
+            test_data = "test@example.com"
+            encrypted = encrypt_with_aes(test_data, password, salt)
+            decrypted = decrypt_with_aes(encrypted, password, salt)
+            self.assertEqual(test_data, decrypted)
+            
+        except Exception as e:
+            self.fail(f"Exfiltration test failed: {str(e)}")
 
 if __name__ == '__main__':
-    run_dns_server_user()
+    unittest.main()
