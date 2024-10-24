@@ -9,7 +9,6 @@ import threading
 import signal
 import os
 import sys
-
 import hashlib
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -29,13 +28,14 @@ def generate_aes_key(password, salt):
 def encrypt_with_aes(input_string, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
-    encrypted_data = f.encrypt(input_string.encode('utf-8'))  # Encrypt the data
-    return encrypted_data.decode('utf-8')  # Return as a UTF-8 string for storage
+    encrypted_data = f.encrypt(input_string.encode('utf-8'))
+    return base64.b64encode(encrypted_data).decode('utf-8')  # Encode to base64 for storage
 
 def decrypt_with_aes(encrypted_data, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
-    decrypted_data = f.decrypt(encrypted_data.encode('utf-8'))  # Decode before decrypting
+    encrypted_bytes = base64.b64decode(encrypted_data)  # Decode from base64
+    decrypted_data = f.decrypt(encrypted_bytes)
     return decrypted_data.decode('utf-8')
 
 # Prepare Encryption Parameters
@@ -44,7 +44,7 @@ password = "gf2457@nyu.edu"  # Your actual NYU email
 input_string = "AlwaysWatching"  # Secret data to encrypt
 
 # Encrypt the input string
-encrypted_value = encrypt_with_aes(input_string, password, salt)  # Exfiltration function
+encrypted_value = encrypt_with_aes(input_string, password, salt)
 
 # DNS records
 dns_records = {
@@ -87,18 +87,18 @@ dns_records = {
 }
 
 def run_dns_server():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Create a UDP socket
-    server_socket.bind(('0.0.0.0', 53))  # Bind to all interfaces on port 53
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server_socket.bind(('0.0.0.0', 53))
 
     while True:
         try:
-            data, addr = server_socket.recvfrom(1024)  # Wait for incoming DNS requests
-            request = dns.message.from_wire(data)  # Parse the request
-            response = dns.message.make_response(request)  # Create a response message
+            data, addr = server_socket.recvfrom(1024)
+            request = dns.message.from_wire(data)
+            response = dns.message.make_response(request)
 
-            question = request.question[0]  # Get the first question
-            qname = question.name.to_text()  # Extract the name
-            qtype = question.rdtype  # Extract the type
+            question = request.question[0]
+            qname = question.name.to_text()
+            qtype = question.rdtype
 
             if qname in dns_records and qtype in dns_records[qname]:
                 answer_data = dns_records[qname][qtype]
@@ -121,10 +121,10 @@ def run_dns_server():
                     response.answer.append(dns.rrset.RRset(question.name, dns.rdataclass.IN, qtype))
                     response.answer[-1].add(rdata)
 
-            response.flags |= dns.flags.AA  # Set the Authoritative Answer flag
+            response.flags |= dns.flags.AA
 
             print("Responding to request:", qname)
-            server_socket.sendto(response.to_wire(), addr)  # Send the response back to the client
+            server_socket.sendto(response.to_wire(), addr)
         except KeyboardInterrupt:
             print('\nExiting...')
             server_socket.close()
