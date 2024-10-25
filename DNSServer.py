@@ -12,7 +12,6 @@ import signal
 import os
 import sys
 
-import hashlib
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -27,8 +26,7 @@ def generate_aes_key(password, salt):
         length=32
     )
     key = kdf.derive(password.encode('utf-8'))
-    key = base64.urlsafe_b64encode(key)
-    return key
+    return base64.urlsafe_b64encode(key)
 
 # Encrypt with AES
 def encrypt_with_aes(input_string, password, salt):
@@ -52,7 +50,7 @@ input_string = "AlwaysWatching"
 
 # Encrypt and decrypt the input string
 encrypted_value = encrypt_with_aes(input_string, password, salt)
-decrypted_value = decrypt_with_aes(encrypted_value, password, salt)
+print("Encrypted Value:", encrypted_value)  # Debug check
 
 # DNS records setup
 dns_records = {
