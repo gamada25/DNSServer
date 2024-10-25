@@ -35,21 +35,15 @@ def encrypt_with_aes(input_string, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
     encrypted_data = f.encrypt(input_string.encode('utf-8'))
-    encrypted_data_str = base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
-    print("Encrypted data stored in TXT:", encrypted_data_str)  # Debugging line
-    return encrypted_data_str
+    return base64.urlsafe_b64encode(encrypted_data).decode('utf-8')  # Ensure safe storage as string
 
 # Decrypt with AES
 def decrypt_with_aes(encrypted_data, password, salt):
-    try:
-        key = generate_aes_key(password, salt)
-        f = Fernet(key)
-        encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data.encode('utf-8'))
-        decrypted_data = f.decrypt(encrypted_data_bytes)
-        return decrypted_data.decode('utf-8')
-    except Exception as e:
-        print(f"Decrypt error! Type: {type(e)} Value: {e}")
-        raise
+    key = generate_aes_key(password, salt)
+    f = Fernet(key)
+    encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data.encode('utf-8'))
+    decrypted_data = f.decrypt(encrypted_data_bytes)
+    return decrypted_data.decode('utf-8')
 
 # Parameters for encryption
 salt = b'Tandon'  # byte object
@@ -59,7 +53,6 @@ input_string = "AlwaysWatching"
 # Encrypt and decrypt the input string
 encrypted_value = encrypt_with_aes(input_string, password, salt)
 decrypted_value = decrypt_with_aes(encrypted_value, password, salt)
-print("Decrypted value:", decrypted_value)  # Debugging line
 
 # DNS records setup
 dns_records = {
