@@ -35,24 +35,34 @@ def encrypt_with_aes(input_string, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
     encrypted_data = f.encrypt(input_string.encode('utf-8'))
-    return base64.urlsafe_b64encode(encrypted_data).decode('utf-8')  # Ensure safe storage as string
+    encrypted_data_str = base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
+    print("Encrypted data for TXT record:", encrypted_data_str)  # Debugging output
+    return encrypted_data_str
 
 # Decrypt with AES
 def decrypt_with_aes(encrypted_data, password, salt):
-    key = generate_aes_key(password, salt)
-    f = Fernet(key)
-    encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data.encode('utf-8'))
-    decrypted_data = f.decrypt(encrypted_data_bytes)
-    return decrypted_data.decode('utf-8')
+    try:
+        key = generate_aes_key(password, salt)
+        f = Fernet(key)
+        encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data.encode('utf-8'))
+        decrypted_data = f.decrypt(encrypted_data_bytes)
+        return decrypted_data.decode('utf-8')
+    except Exception as e:
+        print(f"Decrypt error! Type: {type(e)} Value: {e}")
+        raise
 
 # Parameters for encryption
-salt = b'Tandon'  # byte object
-password = "gf2457@nyu.edu"  # replace with your NYU email
+salt = b'Tandon'
+password = "gf2457@nyu.edu"
 input_string = "AlwaysWatching"
 
-# Encrypt and decrypt the input string
+# Encrypt and verify decryption
 encrypted_value = encrypt_with_aes(input_string, password, salt)
-decrypted_value = decrypt_with_aes(encrypted_value, password, salt)
+try:
+    decrypted_value = decrypt_with_aes(encrypted_value, password, salt)
+    print("Decrypted value:", decrypted_value)  # Ensure correct decryption
+except Exception as e:
+    print("Failed to decrypt:", e)
 
 # DNS records setup
 dns_records = {
@@ -73,10 +83,6 @@ dns_records = {
             86400,
         ),
     },
-    'safebank.com.': {dns.rdatatype.A: '192.168.1.102'},
-    'google.com.': {dns.rdatatype.A: '192.168.1.103'},
-    'legitsite.com.': {dns.rdatatype.A: '192.168.1.104'},
-    'yahoo.com.': {dns.rdatatype.A: '192.168.1.105'},
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
         dns.rdatatype.TXT: (encrypted_value,),  # Store encrypted string in TXT record
