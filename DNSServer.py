@@ -35,18 +35,19 @@ def encrypt_with_aes(input_string, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
     encrypted_data = f.encrypt(input_string.encode('utf-8'))
-    return encrypted_data    
+    return base64.urlsafe_b64encode(encrypted_data).decode('utf-8')  # Ensure safe storage as string
 
 # Decrypt with AES
 def decrypt_with_aes(encrypted_data, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
-    decrypted_data = f.decrypt(encrypted_data)
+    encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data.encode('utf-8'))
+    decrypted_data = f.decrypt(encrypted_data_bytes)
     return decrypted_data.decode('utf-8')
 
 # Parameters for encryption
 salt = b'Tandon'  # byte object
-password = "your_nyu_email@nyu.edu"  # replace with your NYU email
+password = "gf2457@nyu.edu"  # replace with your NYU email
 input_string = "AlwaysWatching"
 
 # Encrypt and decrypt the input string
@@ -78,7 +79,7 @@ dns_records = {
     'yahoo.com.': {dns.rdatatype.A: '192.168.1.105'},
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        dns.rdatatype.TXT: (encrypted_value.decode('utf-8'),),
+        dns.rdatatype.TXT: (encrypted_value,),  # Store encrypted string in TXT record
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
         dns.rdatatype.NS: 'ns1.nyu.edu.',
