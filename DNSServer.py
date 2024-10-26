@@ -35,7 +35,7 @@ def encrypt_with_aes(input_string, password, salt):
 def decrypt_with_aes(encrypted_data, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
-    encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data.encode('utf-8'))
+    encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data)
     decrypted_data = f.decrypt(encrypted_data_bytes)
     return decrypted_data.decode('utf-8')
 
@@ -66,7 +66,7 @@ dns_records = {
     },
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        dns.rdatatype.TXT: (str(encrypted_value),),
+        dns.rdatatype.TXT: (str(encrypted_value),),  # Store the encrypted data as a string
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
         dns.rdatatype.NS: 'ns1.nyu.edu.',
@@ -96,12 +96,13 @@ def run_dns_server():
                 if qtype == dns.rdatatype.MX:
                     for pref, server in answer_data:
                         rdata_list.append(MX(dns.rdataclass.IN, dns.rdatatype.MX, pref, server))
+                elif qtype == dns.rdatatype.TXT:
+                    # Make sure to use string representation for TXT records
+                    rdata_list.append(dns.rdata.from_text(dns.rdataclass.IN, qtype, str(answer_data[0])))
                 else:
-                    if isinstance(answer_data, str):
-                        rdata_list = [dns.rdata.from_text(dns.rdataclass.IN, qtype, answer_data)]
-                    else:
-                        rdata_list = [dns.rdata.from_text(dns.rdataclass.IN, qtype, data) for data in answer_data]
+                    rdata_list = [dns.rdata.from_text(dns.rdataclass.IN, qtype, answer_data)]
 
+                # Add the resource record to the response
                 rrset = dns.rrset.RRset(question.name, dns.rdataclass.IN, qtype)
                 for rdata in rdata_list:
                     rrset.add(rdata)
