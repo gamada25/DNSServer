@@ -31,19 +31,19 @@ def encrypt_with_aes(input_string, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
     encrypted_data = f.encrypt(input_string.encode('utf-8'))
-    return str(base64.b64encode(encrypted_data).decode('utf-8'))  # Convert encrypted data to str
+    return str(base64.b64encode(encrypted_data).decode('utf-8'))
 
 # Decrypt with AES
 def decrypt_with_aes(encrypted_data, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
-    encrypted_bytes = base64.b64decode(encrypted_data)  # Decode from base64
+    encrypted_bytes = base64.b64decode(encrypted_data)
     decrypted_data = f.decrypt(encrypted_bytes)
-    return str(decrypted_data.decode('utf-8'))  # Convert decrypted data to str
+    return str(decrypted_data.decode('utf-8'))
 
-# Parameters for encryption
+# Encryption parameters
 salt = b'Tandon'
-password = "gf2457@nyu.edu"  # Your actual NYU email
+password = "gf2457@nyu.edu"
 input_string = "AlwaysWatching"
 
 # Encrypt the input string
@@ -51,33 +51,27 @@ encrypted_value = encrypt_with_aes(input_string, password, salt)
 
 # DNS records setup
 dns_records = {
-    'example.com.': {
-        dns.rdatatype.A: '192.168.1.101',
-        dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0370:7334',
-        dns.rdatatype.MX: [(10, 'mail.example.com.')],
-        dns.rdatatype.CNAME: 'www.example.com.',
-        dns.rdatatype.NS: 'ns.example.com.',
-        dns.rdatatype.TXT: ('This is a TXT record',),
-        dns.rdatatype.SOA: (
-            'ns1.example.com.',
-            'admin.example.com.',
-            2023081401,
-            3600,
-            1800,
-            604800,
-            86400,
-        ),
+    'safebank.com.': {
+        dns.rdatatype.A: '192.168.1.102',
+    },
+    'google.com.': {
+        dns.rdatatype.A: '192.168.1.103',
+    },
+    'legitsite.com.': {
+        dns.rdatatype.A: '192.168.1.104',
+    },
+    'yahoo.com.': {
+        dns.rdatatype.A: '192.168.1.105',
     },
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        dns.rdatatype.TXT: (str(encrypted_value),),  # Convert encrypted data to str for TXT record
+        dns.rdatatype.TXT: (str(encrypted_value),),  # Store encrypted data as TXT record
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
         dns.rdatatype.NS: 'ns1.nyu.edu.',
     },
 }
 
-# DNS Server function
 def run_dns_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.bind(('0.0.0.0', 53))
@@ -99,10 +93,6 @@ def run_dns_server():
                 if qtype == dns.rdatatype.MX:
                     for pref, server in answer_data:
                         rdata_list.append(MX(dns.rdataclass.IN, dns.rdatatype.MX, pref, server))
-                elif qtype == dns.rdatatype.SOA:
-                    mname, rname, serial, refresh, retry, expire, minimum = answer_data
-                    rdata = SOA(dns.rdataclass.IN, dns.rdatatype.SOA, mname, rname, serial, refresh, retry, expire, minimum)
-                    rdata_list.append(rdata)
                 else:
                     if isinstance(answer_data, str):
                         rdata_list = [dns.rdata.from_text(dns.rdataclass.IN, qtype, answer_data)]
@@ -122,7 +112,6 @@ def run_dns_server():
             server_socket.close()
             sys.exit(0)
 
-# Run server with user input to quit
 def run_dns_server_user():
     print("Input 'q' and hit 'enter' to quit")
     print("DNS server is running...")
