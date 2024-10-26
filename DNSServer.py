@@ -1,8 +1,6 @@
 import dns.message
 import dns.rdatatype
 import dns.rdataclass
-import dns.rdtypes
-import dns.rdtypes.ANY
 from dns.rdtypes.ANY.MX import MX
 from dns.rdtypes.ANY.SOA import SOA
 import dns.rdata
@@ -11,7 +9,7 @@ import threading
 import signal
 import os
 import sys
-
+import hashlib
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -22,7 +20,7 @@ def generate_aes_key(password, salt):
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         iterations=100000,
-        salt=salt.encode('utf-8'),  # Ensure salt is bytes
+        salt=salt,
         length=32
     )
     key = kdf.derive(password.encode('utf-8'))
@@ -33,24 +31,23 @@ def encrypt_with_aes(input_string, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
     encrypted_data = f.encrypt(input_string.encode('utf-8'))
-    return str(base64.urlsafe_b64encode(encrypted_data), 'utf-8')  # Return as string
+    return str(base64.b64encode(encrypted_data).decode('utf-8'))  # Convert encrypted data to str
 
 # Decrypt with AES
 def decrypt_with_aes(encrypted_data, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
-    encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data.encode('utf-8'))
-    decrypted_data = f.decrypt(encrypted_data_bytes)
-    return str(decrypted_data, 'utf-8')  # Decode decrypted data
+    encrypted_bytes = base64.b64decode(encrypted_data)  # Decode from base64
+    decrypted_data = f.decrypt(encrypted_bytes)
+    return str(decrypted_data.decode('utf-8'))  # Convert decrypted data to str
 
 # Parameters for encryption
-salt = "Tandon"  # String salt, converted in key function
-password = "gf2457@nyu.edu"  # replace with your NYU email
+salt = b'Tandon'
+password = "gf2457@nyu.edu"  # Your actual NYU email
 input_string = "AlwaysWatching"
 
-# Encrypt and decrypt the input string
+# Encrypt the input string
 encrypted_value = encrypt_with_aes(input_string, password, salt)
-print("Encrypted Value:", encrypted_value)  # Debug check
 
 # DNS records setup
 dns_records = {
@@ -71,23 +68,19 @@ dns_records = {
             86400,
         ),
     },
-    'safebank.com.': {dns.rdatatype.A: '192.168.1.102'},
-    'google.com.': {dns.rdatatype.A: '192.168.1.103'},
-    'legitsite.com.': {dns.rdatatype.A: '192.168.1.104'},
-    'yahoo.com.': {dns.rdatatype.A: '192.168.1.105'},
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        dns.rdatatype.TXT: (encrypted_value,),  # Store encrypted string in TXT record
+        dns.rdatatype.TXT: (str(encrypted_value),),  # Convert encrypted data to str for TXT record
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
         dns.rdatatype.NS: 'ns1.nyu.edu.',
     },
 }
 
-# DNS Server Function
+# DNS Server function
 def run_dns_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_socket.bind(("0.0.0.0", 53))
+    server_socket.bind(('0.0.0.0', 53))
 
     while True:
         try:
@@ -117,14 +110,13 @@ def run_dns_server():
                         rdata_list = [dns.rdata.from_text(dns.rdataclass.IN, qtype, data) for data in answer_data]
 
                 for rdata in rdata_list:
-                    rrset = dns.rrset.RRset(question.name, dns.rdataclass.IN, qtype)
-                    rrset.add(rdata)
-                    response.answer.append(rrset)
+                    response.answer.append(dns.rrset.RRset(question.name, dns.rdataclass.IN, qtype))
+                    response.answer[-1].add(rdata)
 
-            response.flags |= 1 << 10  # Set AA (Authoritative Answer) flag
-            server_socket.sendto(response.to_wire(), addr)
+            response.flags |= dns.flags.AA
+
             print("Responding to request:", qname)
-
+            server_socket.sendto(response.to_wire(), addr)
         except KeyboardInterrupt:
             print('\nExiting...')
             server_socket.close()
@@ -149,6 +141,3 @@ def run_dns_server_user():
 
 if __name__ == '__main__':
     run_dns_server_user()
-    # Uncomment to see encrypted/decrypted values
-    # print("Encrypted Value:", encrypted_value)
-    # print("Decrypted Value:", decrypted_value)
