@@ -29,15 +29,21 @@ def encrypt_with_aes(input_string, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
     encrypted_data = f.encrypt(input_string.encode('utf-8'))
-    return base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
+    return encrypted_data  # Return bytes directly
 
 # Decrypt with AES
 def decrypt_with_aes(encrypted_data, password, salt):
     key = generate_aes_key(password, salt)
     f = Fernet(key)
-    encrypted_data_bytes = base64.urlsafe_b64decode(encrypted_data)
-    decrypted_data = f.decrypt(encrypted_data_bytes)
-    return decrypted_data.decode('utf-8')
+    try:
+        # Ensure encrypted_data is in bytes
+        if isinstance(encrypted_data, str):
+            encrypted_data = encrypted_data.encode('utf-8')
+        decrypted_data = f.decrypt(encrypted_data)
+        return decrypted_data.decode('utf-8')
+    except Exception as e:
+        print(f"Decryption error: {str(e)}")
+        return None
 
 # Prepare Encryption Parameters
 salt = b'Tandon'
@@ -47,7 +53,7 @@ input_string = "AlwaysWatching"
 # Encrypt the input string
 encrypted_value = encrypt_with_aes(input_string, password, salt)
 
-# DNS records
+# DNS records - store the encrypted value as bytes encoded in base64
 dns_records = {
     'example.com.': {
         dns.rdatatype.A: '192.168.1.101',
@@ -66,7 +72,7 @@ dns_records = {
     },
     'nyu.edu.': {
         dns.rdatatype.A: '192.168.1.106',
-        dns.rdatatype.TXT: (str(encrypted_value),),  # Store the encrypted data as a string
+        dns.rdatatype.TXT: (base64.b64encode(encrypted_value).decode('utf-8'),),  # Store base64 encoded string
         dns.rdatatype.MX: [(10, 'mxa-00256a01.gslb.pphosted.com.')],
         dns.rdatatype.AAAA: '2001:0db8:85a3:0000:0000:8a2e:0373:7312',
         dns.rdatatype.NS: 'ns1.nyu.edu.',
@@ -97,8 +103,9 @@ def run_dns_server():
                     for pref, server in answer_data:
                         rdata_list.append(MX(dns.rdataclass.IN, dns.rdatatype.MX, pref, server))
                 elif qtype == dns.rdatatype.TXT:
-                    # Make sure to use string representation for TXT records
-                    rdata_list.append(dns.rdata.from_text(dns.rdataclass.IN, qtype, str(answer_data[0])))
+                    # For TXT records, use the stored base64 encoded string
+                    txt_data = answer_data[0]  # Get the base64 encoded string
+                    rdata_list.append(dns.rdata.from_text(dns.rdataclass.IN, qtype, f'"{txt_data}"'))
                 else:
                     rdata_list = [dns.rdata.from_text(dns.rdataclass.IN, qtype, answer_data)]
 
